@@ -1,0 +1,73 @@
+#!/bin/sh
+cd $(dirname $0)
+
+# FUNCTIONS
+usage(){
+  warn "Usage: $0 <apply|destroy|import|init|refresh>"
+}
+
+debug(){
+  if [[ ! "${DEBUG}" = "" ]]; then
+    echo "$@"
+  fi
+}
+
+warn(){
+  echo "$@" 1>&2
+}
+
+# VARIABLES
+if [[ -f ./terraw.conf ]]; then
+  source ./terraw.conf
+fi
+
+ENV=${ENV:-staging}
+TF_SRCDIR=${TF_SRCDIR:-source}
+TF_VARS=${TF_VARS:-env-${ENV}.tfvars}
+TF_BACKEND=${TF_BACKEND:-env-${ENV}-backend.tfvars}
+TF_OPTS=${TF_OPTS:-}
+TF_OPTS_INIT=${TF_OPTS_INIT:-}
+TERRAFORM=$(which terraform)
+
+if [[ "$#" = "0" ]]; then
+  usage && exit 1
+fi
+
+if [[ "$TERRAFORM" = "" ]]; then
+  warn "No 'terraform' binary found."
+  exit 2
+fi
+
+if [[ ! "${DEBUG}" = "" ]]; then
+  export TF_LOG=${DEBUG}
+fi
+
+debug "Selected environment: $ENV"
+
+if [[ -f "${TF_VARS}" ]]; then
+  TF_OPTS="$TF_OPTS -var-file=${TF_VARS}"
+  debug "Using '${TF_VARS}' as config file"
+else
+  debug "No config file found. Expected: $TF_VARS"
+fi
+
+if [[ -f "${TF_BACKEND}" ]]; then
+  TF_OPTS_INIT="$TF_OPTS_INIT -backend-config=${TF_BACKEND}"
+  debug "Using '${TF_BACKEND}' as backend config file"
+else
+  debug "No backend file found: $TF_BACKEND"
+fi
+
+CMD="$1"; shift
+
+case "$CMD" in
+  destroy) terraform destroy -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR} ;;
+  apply)   terraform apply   -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR} ;;
+  import)  terraform import  -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR} ;;
+
+  refresh) terraform refresh ${TF_OPTS} $@ ${TF_SRCDIR} ;;
+
+  init)    terraform init    ${TF_OPTS_INIT} $@ ${TF_SRCDIR} ;;
+
+  *) usage && exit 1 ;;
+esac
