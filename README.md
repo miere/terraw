@@ -7,8 +7,14 @@ project, helping you to avoid mistakes when you are moving commands from your de
 your CI/CD tool.
 
 ```shell
+# If you want to initialize a Terraform working directory
 $ ./terraw init
+# Or if you want to update local state file against real resources
+$ ./terraw refresh
+# When you want to generate, show and automatically apply an execution plan
 $ ./terraw apply
+# And, when you just manually fixed something in the UI and want it reflected in you current state
+$ ./terraw import aws_iam_policy.autoscaling arn:aws:iam::123456789012:policy/AutoScaling
 ```
 Usually, you don't have to pass parameters. Under the hood, `terraw` will follow simple conventions
 to infeer where your source code is placed, which externally defined values should be used as input
