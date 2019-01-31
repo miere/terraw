@@ -22,7 +22,7 @@ if [[ -f ./terraw.conf ]]; then
 fi
 
 ENV=${ENV:-staging}
-TF_SRCDIR=${TF_SRCDIR:-source}
+TF_SRCDIR=${TF_SRCDIR:-deployment}
 TF_VARS=${TF_VARS:-env-${ENV}.tfvars}
 TF_BACKEND=${TF_BACKEND:-env-${ENV}-backend.tfvars}
 TF_OPTS=${TF_OPTS:-}

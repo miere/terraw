@@ -38,7 +38,7 @@ the project structure that `terraw` expects in order to work properly.
 ```
 - terraw
 - terraw.conf
-- source/
+- deployment/
    - main.tf
    - variables.tf
    - output.tf
@@ -60,8 +60,8 @@ TF_VARS="custom.tfvars"
 ```
 
 ### The source folder
-As we can see it expects a root folder called `source` which will contain you `tf` files. Indeed, that's
-the only required item from the above structure, as long as you put at least one `tf` file into it. When
+As we can see it expects a root folder called `deployment` which will contain you `tf` files. Indeed, that's
+the only required item from the above structure, and is expected that you put at least one `tf` file into it. When
 you have a big structure to define, or your build plan require a long set of input or output variables,
 it is recommended that you create a separated file for that propose (e.g. variables.tf and output.tf).
 
