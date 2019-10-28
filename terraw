@@ -1,4 +1,5 @@
 #!/bin/sh
+cd $(dirname $0)
 
 # FUNCTIONS
 usage(){
@@ -33,9 +34,18 @@ initialize_terraform(){
   fi
 
   echo "$1" > ${LOCAL_TERRAFORM_DIR}/terraw.env
-  terraform init ${TF_OPTS_INIT} ${TF_SRCDIR}
+  ${TERRAFORM} init ${TF_OPTS_INIT} ${TF_SRCDIR}
 
-  echo "Terraform was configured for '$1' environment." 
+  echo "Terraform was configured for '$1' environment."
+}
+
+install_terraform(){
+  echo "Downloading and installing Terraform ${TERRAFORM_VERSION}..."
+  rm -rf ${TMP_DIR}
+  curl -s -o /tmp/terraform.zip $PACKAGE_URL
+  unzip -d ${TMP_DIR} /tmp/terraform.zip
+  chmod +x ${TMP_DIR}/*
+  echo "Installed terraform ${TERRAFORM_VERSION}."
 }
 
 # VERIFICATIONS
@@ -44,16 +54,31 @@ if [ "$#" = "0" ]; then
   usage && exit 1
 fi
 
+## VARIABLES
+DEBUG=${DEBUG:-}
+DIST=""
+case "$OSTYPE" in
+  linux*) DIST="linux_amd64" ;;
+  darwin*|"") DIST="darwin_amd64" ;;
+esac
+
+TF_SRCDIR=${TF_SRCDIR:-$(pwd)}
+LOCAL_TERRAFORM_DIR="${TF_SRCDIR}/.terraform"
+
 if [ -f ./terraw.conf ]; then
-  . ./terraw.conf
+  . terraw.conf
 fi
 
+TERRAFORM=$(command -v terraform)
+TERRAFORM_VERSION=${TERRAFORM_VERSION:-"0.12.8"}
+TMP_DIR=/tmp/terraform${TERRAFORM_VERSION}
+PACKAGE_URL="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${DIST}.zip"
 CMD="$1"; shift
-LOCAL_TERRAFORM_DIR=".terraform"
 
 if [ ! "$CMD" = "init" ] && [ ! "$CMD" = "deploy" ]; then
   if [ ! -d "${LOCAL_TERRAFORM_DIR}" ]; then
      warn "Terraform not initialized. Aborting..."
+     warn $LOCAL_TERRAFORM_DIR
      exit 3
   fi
 
@@ -78,17 +103,10 @@ if [ "$ENV" = "" ]; then
   exit 6
 fi
 
-TF_SRCDIR=${TF_SRCDIR:-deployment}
-TF_VARS=${TF_VARS:-env-${ENV}.tfvars}
-TF_BACKEND=${TF_BACKEND:-env-${ENV}-backend.tfvars}
+TF_VARS=${TF_VARS:-${TF_SRCDIR}/env-${ENV}.tfvars}
+TF_BACKEND=${TF_BACKEND:-${TF_SRCDIR}/env-${ENV}-backend.tfvars}
 TF_OPTS=${TF_OPTS:-}
 TF_OPTS_INIT=${TF_OPTS_INIT:-}
-TERRAFORM=$(command -v terraform)
-
-if [ "$TERRAFORM" = "" ]; then
-  warn "No 'terraform' binary found."
-  exit 2
-fi
 
 if [ ! "${DEBUG}" = "" ]; then
   export TF_LOG=${DEBUG}
@@ -108,30 +126,48 @@ else
   debug "No backend file found: $TF_BACKEND"
 fi
 
+## USING THE CORRECT TERRAFORM VERSION
+CURRENT_VERSION=""
+if [ ! "$TERRAFORM" = "" ]; then
+    CURRENT_VERSION=$($TERRAFORM --version| head -n 1 | sed 's/[^0-9]*\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
+fi
+
+if [ ! "$CURRENT_VERSION" = "$TERRAFORM_VERSION" ]; then
+  install_terraform
+  export TERRAFORM="${TMP_DIR}/terraform"
+fi
+
 # MAIN
 case "$CMD" in
   deploy)
-    $0 init $ENV || exit 50
-    $0 apply     || exit 50
+    TERRAW="$(pwd)/$(basename $0)"
+    $TERRAW init $ENV || exit 50
+    $TERRAW apply     || exit 50
   ;;
 
   destroy)
     echo "Destroying environment '$ENV'"
-    terraform destroy -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} destroy -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
   ;;
 
   apply)
     echo "Apply changes into environment '$ENV'"
-    terraform apply   -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} apply   -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
   ;;
+
+  plan)
+    echo "Executing 'plan' defined for '$ENV'"
+    ${TERRAFORM} apply ${TF_OPTS} $@ ${TF_SRCDIR}
+  ;;
+
   import)
     echo "Importing environment '$ENV'"
-    terraform import  -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} import  -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
   ;;
 
   refresh)
     echo "Refreshing environment '$ENV'"
-    terraform refresh ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} refresh ${TF_OPTS} $@ ${TF_SRCDIR}
   ;;
 
   init)   initialize_terraform $ENV ;;
