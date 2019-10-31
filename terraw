@@ -157,7 +157,7 @@ case "$CMD" in
 
   plan)
     echo "Executing 'plan' defined for '$ENV'"
-    ${TERRAFORM} apply ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} plan ${TF_OPTS} $@ ${TF_SRCDIR}
   ;;
 
   import)
