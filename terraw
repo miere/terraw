@@ -147,17 +147,17 @@ case "$CMD" in
 
   destroy)
     echo "Destroying environment '$ENV'"
-    ${TERRAFORM} destroy -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} destroy -auto-approve ${TF_OPTS} ${TF_SRCDIR}
   ;;
 
   apply)
     echo "Apply changes into environment '$ENV'"
-    ${TERRAFORM} apply   -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} apply   -auto-approve ${TF_OPTS} ${TF_SRCDIR}
   ;;
 
   plan)
     echo "Executing 'plan' defined for '$ENV'"
-    ${TERRAFORM} plan ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} plan ${TF_OPTS} ${TF_SRCDIR}
   ;;
 
   import)
