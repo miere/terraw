@@ -36,16 +36,16 @@ initialize_terraform(){
   echo "$1" > ${LOCAL_TERRAFORM_DIR}/terraw.env
   ${TERRAFORM} init ${TF_OPTS_INIT} ${TF_SRCDIR}
 
-  echo "Terraform was configured for '$1' environment."
+  debug "Terraform was configured for '$1' environment."
 }
 
 install_terraform(){
-  echo "Downloading and installing Terraform ${TERRAFORM_VERSION}..."
+  debug "Downloading and installing Terraform ${TERRAFORM_VERSION}..."
   rm -rf ${TMP_DIR}
   curl -s -o /tmp/terraform.zip $PACKAGE_URL
   unzip -d ${TMP_DIR} /tmp/terraform.zip
   chmod +x ${TMP_DIR}/*
-  echo "Installed terraform ${TERRAFORM_VERSION}."
+  debug "Installed terraform ${TERRAFORM_VERSION}."
 }
 
 # VERIFICATIONS
@@ -162,7 +162,7 @@ case "$CMD" in
 
   import)
     echo "Importing environment '$ENV'"
-    ${TERRAFORM} import  -auto-approve ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} import ${TF_OPTS} $@
   ;;
 
   refresh)
