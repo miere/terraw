@@ -133,8 +133,12 @@ if [ ! "$TERRAFORM" = "" ]; then
 fi
 
 if [ ! "$CURRENT_VERSION" = "$TERRAFORM_VERSION" ]; then
-  install_terraform
   export TERRAFORM="${TMP_DIR}/terraform"
+  if [ ! -f $TERRAFORM ]; then
+    install_terraform
+  else
+    debug "Using terraform ${TERRAFORM_VERSION} that has been previously downloaded"
+  fi
 fi
 
 # MAIN
@@ -167,7 +171,7 @@ case "$CMD" in
 
   refresh)
     echo "Refreshing environment '$ENV'"
-    ${TERRAFORM} refresh ${TF_OPTS} $@ ${TF_SRCDIR}
+    ${TERRAFORM} refresh ${TF_OPTS} ${TF_SRCDIR}
   ;;
 
   init)   initialize_terraform $ENV ;;
