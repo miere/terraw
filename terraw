@@ -169,6 +169,12 @@ case "$CMD" in
     ${TERRAFORM} import ${TF_OPTS} $@
   ;;
 
+  state)
+    echo "Listing the Terraform state for environment '$ENV'"
+    echo ${TF_OPTS}
+    ${TERRAFORM} state $@
+  ;;
+
   refresh)
     echo "Refreshing environment '$ENV'"
     ${TERRAFORM} refresh ${TF_OPTS} ${TF_SRCDIR}
