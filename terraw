@@ -1,4 +1,8 @@
 #!/bin/sh
+if [ ! "${VERBOSE}" = "" ]; then
+  set -x
+fi
+
 cd $(dirname $0)
 
 # FUNCTIONS
@@ -6,8 +10,12 @@ usage(){
   warn "Usage: $0 <apply|destroy|import|init|refresh>"
 }
 
+info(){
+  printf "\033[1;33m$@\033[m\n"
+}
+
 debug(){
-  if [ ! "${DEBUG}" = "" ]; then
+  if [ ! "${VERBOSE}" = "" ]; then
     echo "$@"
   fi
 }
@@ -17,35 +25,35 @@ warn(){
 }
 
 initialize_terraform(){
-  echo "Configuring environment '$1'..."
+  info "Configuring environment '$1'..."
 
-  mkdir -p ${LOCAL_TERRAFORM_DIR}
+  mkdir -p ${LOCAL_TF_DIR}
 
-  if [ -f ${LOCAL_TERRAFORM_DIR}/terraw.env ]; then
-    CURRENT=$(cat ${LOCAL_TERRAFORM_DIR}/terraw.env)
-    if [ -f ${LOCAL_TERRAFORM_DIR}/terraform.tfstate ]; then
-      mv ${LOCAL_TERRAFORM_DIR}/terraform.tfstate ${LOCAL_TERRAFORM_DIR}/terraform.tfstate.$CURRENT
+  if [ -f ${LOCAL_TF_DIR}/terraw.env ]; then
+    CURRENT=$(cat ${LOCAL_TF_DIR}/terraw.env)
+    if [ -f ${LOCAL_TF_DIR}/terraform.tfstate ]; then
+      mv ${LOCAL_TF_DIR}/terraform.tfstate ${LOCAL_TF_DIR}/terraform.tfstate.$CURRENT
     fi
     if [ ! "$CURRENT" = "$1" ]; then
-      if [ -f ${LOCAL_TERRAFORM_DIR}/terraform.tfstate.$1 ]; then
-         mv ${LOCAL_TERRAFORM_DIR}/terraform.tfstate.$1 ${LOCAL_TERRAFORM_DIR}/terraform.tfstate
+      if [ -f ${LOCAL_TF_DIR}/terraform.tfstate.$1 ]; then
+         mv ${LOCAL_TF_DIR}/terraform.tfstate.$1 ${LOCAL_TF_DIR}/terraform.tfstate
       fi
     fi
   fi
 
-  echo "$1" > ${LOCAL_TERRAFORM_DIR}/terraw.env
-  ${TERRAFORM} init ${TF_OPTS_INIT} ${TF_SRCDIR}
+  echo "$1" > ${LOCAL_TF_DIR}/terraw.env
+  ${TERRAFORM} init -input=false ${TF_OPTS_INIT} ${TF_SRCDIR}
 
   debug "Terraform was configured for '$1' environment."
 }
 
 install_terraform(){
-  debug "Downloading and installing Terraform ${TERRAFORM_VERSION}..."
+  warn "Downloading and installing Terraform ${TF_VERSION}..."
   rm -rf ${TMP_DIR}
   curl -s -o /tmp/terraform.zip $PACKAGE_URL
   unzip -d ${TMP_DIR} /tmp/terraform.zip
   chmod +x ${TMP_DIR}/*
-  debug "Installed terraform ${TERRAFORM_VERSION}."
+  debug "Installed terraform ${TF_VERSION}."
 }
 
 # VERIFICATIONS
@@ -55,38 +63,45 @@ if [ "$#" = "0" ]; then
 fi
 
 ## VARIABLES
-DEBUG=${DEBUG:-}
 DIST=""
+OSTYPE=${OSTYPE:-$(uname)}
+echo "Detected OS: $OSTYPE"
 case "$OSTYPE" in
-  linux*) DIST="linux_amd64" ;;
-  darwin*|"") DIST="darwin_amd64" ;;
+  linux*|Linux) DIST="linux_amd64" ;;
+  darwin*|Darwin) DIST="darwin_amd64" ;;
 esac
 
-TF_SRCDIR=${TF_SRCDIR:-$(pwd)}
-LOCAL_TERRAFORM_DIR="${TF_SRCDIR}/.terraform"
+TF_ENV_DIR=${TF_ENV_DIR:-$(pwd)}
+TF_SRCDIR=${TF_SRCDIR:-$(pwd)/src}
+LOCAL_TF_DIR="${LOCAL_TF_DIR:-${TF_SRCDIR}/.terraform}"
 
 if [ -f ./terraw.conf ]; then
   . ./terraw.conf
 fi
 
+cd $TF_SRCDIR
+export TF_IN_AUTOMATION="true"
 TERRAFORM=$(command -v terraform)
-TERRAFORM_VERSION=${TERRAFORM_VERSION:-"0.12.8"}
-TMP_DIR=/tmp/terraform${TERRAFORM_VERSION}
-PACKAGE_URL="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${DIST}.zip"
+TF_VERSION=${TF_VERSION:-"0.12.8"}
+TMP_DIR=/tmp/terraform${TF_VERSION}
+TMP_PLAN_OUT="$TMP_DIR/plan.out"
+PACKAGE_URL="https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_${DIST}.zip"
 CMD="$1"; shift
 
+mkdir -p $TMP_DIR
+
 if [ ! "$CMD" = "init" ] && [ ! "$CMD" = "deploy" ]; then
-  if [ ! -d "${LOCAL_TERRAFORM_DIR}" ]; then
+  if [ ! -d "${LOCAL_TF_DIR}" ]; then
      warn "Terraform not initialized. Aborting..."
-     warn $LOCAL_TERRAFORM_DIR
+     warn $LOCAL_TF_DIR
      exit 3
   fi
 
-  if [ ! -f "${LOCAL_TERRAFORM_DIR}/terraw.env" ]; then
+  if [ ! -f "${LOCAL_TF_DIR}/terraw.env" ]; then
      warn "This terraform project wasn't initialized by terraw."
      exit 4
   fi
-  ENV=$(cat ${LOCAL_TERRAFORM_DIR}/terraw.env)
+  ENV=$(cat ${LOCAL_TF_DIR}/terraw.env)
 elif [ "$1" = "" ]; then
   warn "No deployment environment defined"
   warn "Usage: $0 <init|deploy> [ENV]"
@@ -103,14 +118,10 @@ if [ "$ENV" = "" ]; then
   exit 6
 fi
 
-TF_VARS=${TF_VARS:-${TF_SRCDIR}/env-${ENV}.tfvars}
-TF_BACKEND=${TF_BACKEND:-${TF_SRCDIR}/env-${ENV}-backend.tfvars}
+TF_VARS=${TF_VARS:-${TF_ENV_DIR}/env-${ENV}.tfvars}
+TF_BACKEND=${TF_BACKEND:-${TF_ENV_DIR}/env-${ENV}-backend.tfvars}
 TF_OPTS=${TF_OPTS:-}
 TF_OPTS_INIT=${TF_OPTS_INIT:-}
-
-if [ ! "${DEBUG}" = "" ]; then
-  export TF_LOG=${DEBUG}
-fi
 
 if [ -f "${TF_VARS}" ]; then
   TF_OPTS="$TF_OPTS -var-file=${TF_VARS}"
@@ -128,16 +139,20 @@ fi
 
 ## USING THE CORRECT TERRAFORM VERSION
 CURRENT_VERSION=""
+if [ "$TERRAFORM" = "" -a -x "$TMP_DIR/terraform" ]; then
+    TERRAFORM="$TMP_DIR/terraform"
+fi
+
 if [ ! "$TERRAFORM" = "" ]; then
     CURRENT_VERSION=$($TERRAFORM --version| head -n 1 | sed 's/[^0-9]*\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
 fi
 
-if [ ! "$CURRENT_VERSION" = "$TERRAFORM_VERSION" ]; then
+if [ ! "$CURRENT_VERSION" = "$TF_VERSION" ]; then
   export TERRAFORM="${TMP_DIR}/terraform"
   if [ ! -f $TERRAFORM ]; then
     install_terraform
   else
-    debug "Using terraform ${TERRAFORM_VERSION} that has been previously downloaded"
+    debug "Using terraform ${TF_VERSION} that has been previously downloaded"
   fi
 fi
 
@@ -150,31 +165,40 @@ case "$CMD" in
   ;;
 
   destroy)
-    echo "Destroying environment '$ENV'"
-    ${TERRAFORM} destroy -auto-approve ${TF_OPTS} ${TF_SRCDIR}
+    info "Destroying environment '$ENV'"
+    ${TERRAFORM} destroy -auto-approve ${TF_OPTS} ${TF_SRCDIR} || exit 51
+  ;;
+
+  destroy-target)
+    info "Destroying environment '$ENV'"
+    ${TERRAFORM} destroy ${TF_OPTS} -target=$@ ${TF_SRCDIR} || exit 52
   ;;
 
   apply)
-    echo "Apply changes into environment '$ENV'"
-    ${TERRAFORM} apply   -auto-approve ${TF_OPTS} ${TF_SRCDIR}
+    info "Computing execution plan for environment '$ENV'"
+    rm -f ${TMP_PLAN_OUT}
+    ${TERRAFORM} plan -input=false ${TF_OPTS} -out ${TMP_PLAN_OUT} ${TF_SRCDIR} || exit 53
+    info "Applying changes into environment '$ENV'"
+    ${TERRAFORM} apply -input=false -compact-warnings -auto-approve ${TMP_PLAN_OUT} || exit 54
   ;;
 
   plan)
-    echo "Executing 'plan' defined for '$ENV'"
-    ${TERRAFORM} plan ${TF_OPTS} ${TF_SRCDIR}
+    info "Computing execution plan for environment '$ENV'"
+    ${TERRAFORM} plan -input=false ${TF_OPTS} ${TF_SRCDIR} || exit 55
   ;;
 
   import)
-    echo "Importing environment '$ENV'"
-    ${TERRAFORM} import ${TF_OPTS} $@
+    info "Importing configurations for environment '$ENV'"
+    ${TERRAFORM} import ${TF_OPTS} $@ || exit 56
   ;;
 
   refresh)
-    echo "Refreshing environment '$ENV'"
-    ${TERRAFORM} refresh ${TF_OPTS} ${TF_SRCDIR}
+    info "Refreshing environment '$ENV'"
+    ${TERRAFORM} refresh ${TF_OPTS} ${TF_SRCDIR} || exit 57
   ;;
 
-  init)   initialize_terraform $ENV ;;
+  init)   initialize_terraform $ENV || exit 58 ;;
   build)  warn 'Nothing to do here... for now!' ;;
+  validate) ${TERRAFORM} validate ${TF_SRCDIR} || exit 59 ;;
   *)      usage && exit 1 ;;
 esac
